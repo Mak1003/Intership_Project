@@ -1,0 +1,21 @@
+body {
+  font-family: Arial, sans-serif;
+  background: #0b1c2d;
+  color: #fff;
+  padding: 20px;
+}
+
+canvas {
+  display: block;
+  max-width: 100%;
+  margin-top: 20px;
+  border: 1px solid #333;
+}
+
+.controls {
+  margin-top: 10px;
+}
+
+label {
+  margin-right: 10px;
+}
