@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Underwater Image Converter</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <h2>Underwater Image Converter</h2>
+
+  <input type="file" id="imageInput" accept="image/*" />
+
+  <div class="controls">
+    <label>Preset:</label>
+    <select id="preset">
+      <option value="OCEAN">Ocean</option>
+      <option value="POOL">Pool</option>
+      <option value="DEEP">Deep</option>
+    </select>
+
+    <label>Intensity:</label>
+    <input type="range" id="intensity" min="0" max="1" step="0.01" value="1" />
+  </div>
+
+  <canvas id="glCanvas"></canvas>
+
+  <button id="download">Download Image</button>
+
+  <script src="app.js"></script>
+</body>
+</html>
