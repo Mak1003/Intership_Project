@@ -15,12 +15,16 @@ const PRESETS = {
     haze: 3.0
   }
 };
+
+//WebGl setup
 const canvas = document.getElementById("glCanvas");
 const gl = canvas.getContext("webgl2");
 
 if (!gl) {
   alert("WebGL2 not supported");
 }
+
+//Vertex shader source
 const vertexSrc = `#version 300 es
 in vec2 a_position;
 out vec2 v_uv;
@@ -29,6 +33,8 @@ void main() {
   v_uv = a_position * 0.5 + 0.5;
   gl_Position = vec4(a_position, 0.0, 1.0);
 }`;
+
+//Fragment shader source
 const fragmentSrc = `#version 300 es
 precision highp float;
 
@@ -54,19 +60,35 @@ float edgeStrength(vec2 uv) {
   return clamp(abs(l - r) + abs(l - u), 0.0, 1.0);
 }
 
+vec3 depthBlur(vec2 uv, float depth) {
+  vec2 px = 1.0 / u_resolution;
+  float radius = depth * 2.0;
+
+  vec3 sum = vec3(0.0);
+  sum += texture(u_image, uv + px * vec2(-radius, 0.0)).rgb;
+  sum += texture(u_image, uv + px * vec2(radius, 0.0)).rgb;
+  sum += texture(u_image, uv + px * vec2(0.0, -radius)).rgb;
+  sum += texture(u_image, uv + px * vec2(0.0, radius)).rgb;
+  sum += texture(u_image, uv).rgb;
+
+  return sum / 5.0;
+}
+
 void main() {
-  vec3 J = texture(u_image, v_uv).rgb;
+  vec3 original = texture(u_image, v_uv).rgb;
 
   float vertical = v_uv.y;
   float edge = edgeStrength(v_uv);
   float center = 1.0 - distance(v_uv, vec2(0.5));
 
-  float depth = 
+  float depth =
       0.6 * vertical +
       0.25 * (1.0 - edge) +
       0.15 * center;
 
   depth = clamp(depth, 0.0, 1.0);
+
+  vec3 J = mix(original, depthBlur(v_uv, depth), depth * 0.6);
 
   vec3 t;
   t.r = exp(-u_attenuation.r * depth);
@@ -76,14 +98,20 @@ void main() {
   vec3 B = u_waterColor * (1.0 - exp(-u_haze * depth));
 
   vec3 underwater = J * t + B;
-  vec3 finalColor = mix(J, underwater, u_intensity);
+  underwater = mix(underwater, u_waterColor, depth * 0.15);
+
+  vec3 mixed = mix(original, underwater, u_intensity);
+  vec3 finalColor = mix(vec3(0.5), mixed, 1.0 - depth * 0.25);
+
+  finalColor = pow(finalColor, vec3(1.0 / 1.2));
 
   outColor = vec4(finalColor, 1.0);
 }`;
 
-function compile(type, source) {
+//compile and link
+function compile(type, src) {
   const s = gl.createShader(type);
-  gl.shaderSource(s, source);
+  gl.shaderSource(s, src);
   gl.compileShader(s);
   if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
     console.error(gl.getShaderInfoLog(s));
@@ -97,6 +125,7 @@ gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fragmentSrc));
 gl.linkProgram(program);
 gl.useProgram(program);
 
+//Full screen quad
 const quad = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, quad);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
@@ -108,7 +137,8 @@ const posLoc = gl.getAttribLocation(program, "a_position");
 gl.enableVertexAttribArray(posLoc);
 gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
 
-let texture = gl.createTexture();
+//Texture loading
+const texture = gl.createTexture();
 
 function loadTexture(img) {
   canvas.width = img.width;
@@ -116,19 +146,29 @@ function loadTexture(img) {
   gl.viewport(0, 0, canvas.width, canvas.height);
 
   gl.bindTexture(gl.TEXTURE_2D, texture);
+
+  // ✅ FIX: Flip image vertically for WebGL
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
   gl.texImage2D(
-    gl.TEXTURE_2D, 0, gl.RGB,
-    gl.RGB, gl.UNSIGNED_BYTE, img
+    gl.TEXTURE_2D,
+    0,
+    gl.RGB,
+    gl.RGB,
+    gl.UNSIGNED_BYTE,
+    img
   );
 
   render();
 }
 
+
+//render function
 function render() {
   const preset = PRESETS[presetSelect.value];
 
@@ -140,6 +180,8 @@ function render() {
 
   gl.drawArrays(gl.TRIANGLES, 0, 6);
 }
+
+//UI wiring
 const imageInput = document.getElementById("imageInput");
 const presetSelect = document.getElementById("preset");
 const intensity = document.getElementById("intensity");
@@ -152,6 +194,8 @@ imageInput.onchange = e => {
 
 presetSelect.oninput = render;
 intensity.oninput = render;
+
+//download
 document.getElementById("download").onclick = () => {
   const a = document.createElement("a");
   a.download = "underwater.png";
