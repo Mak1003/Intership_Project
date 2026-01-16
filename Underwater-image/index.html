@@ -1,11 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <title>Underwater Image Converter</title>
+
+  <!-- Required for stable WASM / workers -->
   <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin">
   <meta http-equiv="Cross-Origin-Embedder-Policy" content="require-corp">
-  <link rel="stylesheet" href="style.css" />
+
+  <link rel="stylesheet" href="./style.css" />
 </head>
 
 <body>
@@ -15,11 +19,12 @@
   <input type="file" id="imageInput" accept="image/*" />
 
   <div class="controls">
-    <label>Preset:</label>
+    <label>Water Type:</label>
     <select id="preset">
-      <option value="OCEAN">Ocean</option>
-      <option value="POOL">Pool</option>
-      <option value="DEEP">Deep</option>
+      <option value="CLEAR_OCEAN">Clear Ocean</option>
+      <option value="COASTAL">Green Ocean</option>
+      <option value="MURKY">Lake / River</option>
+      <option value="POOL">Swimming Pool</option>
     </select>
 
     <label>Intensity:</label>
@@ -30,6 +35,9 @@
 
   <button id="download">Download Image</button>
 
-  <script src="app.js"></script>
+  <!-- IMPORTANT: NO onnxruntime here -->
+  <script src="./app.js"></script>
+
 </body>
+
 </html>

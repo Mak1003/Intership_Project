@@ -1,27 +1,41 @@
-/* =========================
-   PRESETS
-========================= */
+/* =========================================================
+   WATER PRESETS (PHYSICALLY MOTIVATED)
+========================================================= */
 const PRESETS = {
-  OCEAN: {
+
+  CLEAR_OCEAN: {
     waterColor: [0.0, 0.35, 0.55],
-    attenuation: [3.0, 1.5, 0.8],
-    haze: 2.0
+    attenuation: [4.5, 1.8, 0.8],
+    haze: 1.2,
+    contrastFalloff: 1.2
   },
+
+  COASTAL: {
+    waterColor: [0.15, 0.45, 0.35],
+    attenuation: [3.8, 2.2, 1.4],
+    haze: 2.0,
+    contrastFalloff: 1.6
+  },
+
+  MURKY: {
+    waterColor: [0.25, 0.35, 0.2],
+    attenuation: [3.0, 2.8, 2.2],
+    haze: 3.2,
+    contrastFalloff: 2.4
+  },
+
   POOL: {
-    waterColor: [0.2, 0.7, 0.8],
+    waterColor: [0.2, 0.7, 0.85],
     attenuation: [2.0, 1.0, 0.5],
-    haze: 1.2
-  },
-  DEEP: {
-    waterColor: [0.0, 0.15, 0.3],
-    attenuation: [4.0, 2.2, 1.0],
-    haze: 3.0
+    haze: 0.8,
+    contrastFalloff: 0.8
   }
+
 };
 
-/* =========================
-   WEBGL SETUP (FIRST!)
-========================= */
+/* =========================================================
+   WEBGL SETUP
+========================================================= */
 const canvas = document.getElementById("glCanvas");
 const gl = canvas.getContext("webgl2");
 
@@ -30,9 +44,12 @@ if (!gl) {
   throw new Error("WebGL2 not supported");
 }
 
-/* =========================
+gl.disable(gl.DEPTH_TEST);
+gl.disable(gl.CULL_FACE);
+
+/* =========================================================
    ML DEPTH WORKER
-========================= */
+========================================================= */
 const depthWorker = new Worker("depthWorker.js");
 
 let depthTexture = gl.createTexture();
@@ -41,17 +58,17 @@ let useMLDepth = false;
 depthWorker.onmessage = (e) => {
   const { depth, width, height } = e.data;
 
-  // Normalize depth
   let min = Infinity, max = -Infinity;
-  for (let v of depth) {
+  for (const v of depth) {
     min = Math.min(min, v);
     max = Math.max(max, v);
   }
 
+  // Normalize depth to 8-bit (STABLE)
   const normalized = new Uint8Array(depth.length);
   for (let i = 0; i < depth.length; i++) {
     const v = (depth[i] - min) / (max - min + 1e-6);
-  normalized[i] = Math.max(0, Math.min(255, v * 255));
+    normalized[i] = Math.max(0, Math.min(255, v * 255));
   }
 
   gl.bindTexture(gl.TEXTURE_2D, depthTexture);
@@ -63,7 +80,7 @@ depthWorker.onmessage = (e) => {
   gl.texImage2D(
     gl.TEXTURE_2D,
     0,
-    gl.R8,           // ✅ SAFE FORMAT
+    gl.R8,
     width,
     height,
     0,
@@ -86,16 +103,12 @@ function runMLDepth(img) {
   ctx.drawImage(img, 0, 0, size, size);
   const data = ctx.getImageData(0, 0, size, size).data;
 
-  depthWorker.postMessage({
-    imageData: data,
-    width: size,
-    height: size
-  });
+  depthWorker.postMessage({ imageData: data, width: size, height: size });
 }
 
-/* =========================
+/* =========================================================
    SHADERS
-========================= */
+========================================================= */
 const vertexSrc = `#version 300 es
 in vec2 a_position;
 out vec2 v_uv;
@@ -116,6 +129,7 @@ uniform float u_intensity;
 uniform vec3 u_waterColor;
 uniform vec3 u_attenuation;
 uniform float u_haze;
+uniform float u_contrastFalloff;
 
 in vec2 v_uv;
 out vec4 outColor;
@@ -132,9 +146,9 @@ float edgeStrength(vec2 uv) {
   return clamp(abs(l - r) + abs(l - u), 0.0, 1.0);
 }
 
-vec3 depthBlur(vec2 uv, float depth) {
+vec3 depthBlur(vec2 uv, float d) {
   vec2 px = 1.0 / u_resolution;
-  float r = depth * 2.0;
+  float r = d * 2.0;
   vec3 s = vec3(0.0);
   s += texture(u_image, uv).rgb;
   s += texture(u_image, uv + px * vec2(r, 0.0)).rgb;
@@ -160,26 +174,31 @@ void main() {
 
   vec3 J = mix(original, depthBlur(v_uv, depth), depth * 0.6);
 
+  float d = depth * depth;
   vec3 t;
-  t.r = exp(-u_attenuation.r * depth);
-  t.g = exp(-u_attenuation.g * depth);
-  t.b = exp(-u_attenuation.b * depth);
+  t.r = exp(-u_attenuation.r * d * 1.8);
+  t.g = exp(-u_attenuation.g * d * 1.2);
+  t.b = exp(-u_attenuation.b * d * 0.8);
 
-  vec3 B = u_waterColor * (1.0 - exp(-u_haze * depth));
+  float fogFactor = (1.0 - edgeStrength(v_uv)) * depth;
+  vec3 B = u_waterColor * (1.0 - exp(-u_haze * fogFactor));
+
   vec3 underwater = J * t + B;
   underwater = mix(underwater, u_waterColor, depth * 0.15);
 
   vec3 mixed = mix(original, underwater, u_intensity);
-  vec3 finalColor = mix(vec3(0.5), mixed, 1.0 - depth * 0.25);
-  finalColor = pow(finalColor, vec3(1.0 / 1.2));
 
+  float contrast = exp(-depth * u_contrastFalloff);
+  vec3 finalColor = mix(vec3(0.5), mixed, contrast);
+
+  finalColor = pow(finalColor, vec3(1.0 / 1.2));
   outColor = vec4(finalColor, 1.0);
 }
 `;
 
-/* =========================
+/* =========================================================
    PROGRAM
-========================= */
+========================================================= */
 function compile(type, src) {
   const s = gl.createShader(type);
   gl.shaderSource(s, src);
@@ -196,9 +215,9 @@ gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fragmentSrc));
 gl.linkProgram(program);
 gl.useProgram(program);
 
-/* =========================
+/* =========================================================
    GEOMETRY
-========================= */
+========================================================= */
 const quad = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, quad);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
@@ -210,9 +229,9 @@ const posLoc = gl.getAttribLocation(program, "a_position");
 gl.enableVertexAttribArray(posLoc);
 gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
 
-/* =========================
+/* =========================================================
    IMAGE TEXTURE
-========================= */
+========================================================= */
 const imageTexture = gl.createTexture();
 
 function loadTexture(img) {
@@ -229,13 +248,12 @@ function loadTexture(img) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img);
-
   render();
 }
 
-/* =========================
+/* =========================================================
    RENDER
-========================= */
+========================================================= */
 function render() {
   const preset = PRESETS[presetSelect.value];
 
@@ -254,13 +272,14 @@ function render() {
   gl.uniform3fv(gl.getUniformLocation(program, "u_waterColor"), preset.waterColor);
   gl.uniform3fv(gl.getUniformLocation(program, "u_attenuation"), preset.attenuation);
   gl.uniform1f(gl.getUniformLocation(program, "u_haze"), preset.haze);
+  gl.uniform1f(gl.getUniformLocation(program, "u_contrastFalloff"), preset.contrastFalloff);
 
   gl.drawArrays(gl.TRIANGLES, 0, 6);
 }
 
-/* =========================
+/* =========================================================
    UI
-========================= */
+========================================================= */
 const imageInput = document.getElementById("imageInput");
 const presetSelect = document.getElementById("preset");
 const intensity = document.getElementById("intensity");
@@ -278,13 +297,12 @@ imageInput.onchange = (e) => {
   img.src = URL.createObjectURL(file);
 };
 
-
 presetSelect.oninput = render;
 intensity.oninput = render;
 
-/* =========================
+/* =========================================================
    DOWNLOAD
-========================= */
+========================================================= */
 document.getElementById("download").onclick = () => {
   const a = document.createElement("a");
   a.download = "underwater.png";
