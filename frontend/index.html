@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>UnderWater-Sim | Underwater Vision Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ocean-deep: #030d1a;
+    --ocean-mid: #041528;
+    --ocean-surface: #071e38;
+    --water-glow: #0a4a7a;
+    --biolume: #00d4aa;
+    --biolume-dim: #007a62;
+    --ray: #4fc3f7;
+    --ray-dim: #1a6a8a;
+    --sand: #c9a96e;
+    --coral-red: #ff6b6b;
+    --text-primary: #e8f4fd;
+    --text-secondary: #7eb8d4;
+    --text-muted: #3a6a8a;
+    --panel-bg: rgba(4, 21, 40, 0.85);
+    --panel-border: rgba(0, 212, 170, 0.15);
+    --card-bg: rgba(7, 30, 56, 0.9);
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--ocean-deep);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated water background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 20% 50%, rgba(0,100,150,0.15) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 20%, rgba(0,80,120,0.1) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 80%, rgba(0,60,100,0.12) 0%, transparent 55%);
+    pointer-events: none;
+    z-index: 0;
+    animation: waterShift 8s ease-in-out infinite alternate;
+  }
+
+  @keyframes waterShift {
+    0% { opacity: 0.6; transform: scale(1); }
+    100% { opacity: 1; transform: scale(1.05); }
+  }
+
+  .app-wrapper { position: relative; z-index: 1; }
+
+  /* ─── HEADER ─────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.25rem 2.5rem;
+    border-bottom: 1px solid var(--panel-border);
+    backdrop-filter: blur(20px);
+    background: rgba(3, 13, 26, 0.7);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-icon {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--biolume), var(--ray));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+
+  .logo-text {
+    font-family: 'Space Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--biolume);
+    letter-spacing: -0.5px;
+  }
+
+  .logo-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-top: 1px;
+  }
+
+  .status-pill {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 14px;
+    border: 1px solid var(--panel-border);
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: 'Space Mono', monospace;
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--biolume);
+    box-shadow: 0 0 6px var(--biolume);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ─── MAIN LAYOUT ─────────────────────────────────── */
+  .main {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 2.5rem 2rem;
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 2rem;
+    align-items: start;
+  }
+
+  /* ─── SIDEBAR / CONTROLS ──────────────────────────── */
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .panel {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 16px;
+    backdrop-filter: blur(20px);
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--panel-border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .panel-icon {
+    font-size: 14px;
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    background: rgba(0, 212, 170, 0.1);
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .panel-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--biolume);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+
+  .panel-body { padding: 1.25rem; }
+
+  /* Mode toggle */
+  .mode-toggle {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    padding: 6px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 10px;
+    margin-bottom: 1rem;
+  }
+
+  .mode-btn {
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+  }
+
+  .mode-btn.active {
+    background: var(--biolume);
+    color: var(--ocean-deep);
+    font-weight: 600;
+  }
+
+  /* Sliders */
+  .slider-group {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .slider-row label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    font-family: 'Space Mono', monospace;
+  }
+
+  .slider-val {
+    color: var(--biolume);
+    font-weight: 700;
+  }
+
+  input[type=range] {
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--ray-dim);
+    outline: none;
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--biolume);
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(0, 212, 170, 0.5);
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--panel-border);
+  }
+
+  .tab-btn {
+    flex: 1;
+    padding: 0.875rem 1rem;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .tab-btn.active {
+    color: var(--biolume);
+    border-bottom-color: var(--biolume);
+  }
+
+  .tab-btn:hover:not(.active) { color: var(--text-secondary); }
+
+  /* ─── WORKSPACE ───────────────────────────────────── */
+  .workspace { display: flex; flex-direction: column; gap: 1.5rem; }
+
+  /* Upload zone */
+  .drop-zone {
+    border: 1.5px dashed var(--panel-border);
+    border-radius: 16px;
+    padding: 3rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    background: var(--panel-bg);
+    backdrop-filter: blur(20px);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--biolume);
+    background: rgba(0, 212, 170, 0.05);
+  }
+
+  .drop-zone input[type=file] {
+    position: absolute; inset: 0;
+    opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+
+  .drop-icon { font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.6; }
+
+  .drop-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+
+  .drop-sub {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  /* Process button */
+  .process-btn {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--biolume-dim), var(--biolume));
+    color: var(--ocean-deep);
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .process-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(0, 212, 170, 0.3);
+  }
+
+  .process-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* Before/After comparison */
+  .comparison-wrapper {
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    backdrop-filter: blur(20px);
+  }
+
+  .comparison-header {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--panel-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .comparison-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--biolume);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+
+  .download-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--biolume);
+    font-size: 12px;
+    font-family: 'Space Mono', monospace;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .download-btn:hover {
+    background: rgba(0, 212, 170, 0.1);
+    border-color: var(--biolume);
+  }
+
+  .compare-container {
+    position: relative;
+    width: 100%;
+    user-select: none;
+    overflow: hidden;
+    min-height: 300px;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .compare-container img {
+    width: 100%;
+    height: auto;
+    display: block;
+    max-height: 500px;
+    object-fit: contain;
+  }
+
+  .compare-overlay {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+  }
+
+  .compare-overlay img {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: contain;
+  }
+
+  .compare-slider-line {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 2px;
+    background: white;
+    cursor: ew-resize;
+    z-index: 10;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+  }
+
+  .compare-handle {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+    cursor: ew-resize;
+    color: #333;
+  }
+
+  .compare-label {
+    position: absolute;
+    top: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .label-before {
+    left: 12px;
+    background: rgba(0,0,0,0.6);
+    color: white;
+  }
+
+  .label-after {
+    right: 12px;
+    background: rgba(0, 212, 170, 0.85);
+    color: var(--ocean-deep);
+  }
+
+  /* Webcam */
+  .webcam-container {
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #000;
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  video, .webcam-out {
+    width: 100%;
+    border-radius: 0;
+    display: block;
+  }
+  #webcam-video {
+    position: relative;
+    z-index: 1;
+  }
+
+  .webcam-out {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 2;
+  }
+
+  .webcam-out.visible { opacity: 1; }
+
+  .webcam-overlay-label {
+    position: absolute;
+    top: 12px; right: 12px;
+    background: rgba(0, 212, 170, 0.85);
+    color: var(--ocean-deep);
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .webcam-btn {
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: 1px solid var(--panel-border);
+    background: rgba(0,212,170,0.1);
+    color: var(--biolume);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin: 0 6px;
+  }
+
+  .webcam-btn:hover { background: rgba(0,212,170,0.2); }
+  .webcam-btn.danger { color: var(--coral-red); border-color: rgba(255,107,107,0.3); }
+  .webcam-btn.danger:hover { background: rgba(255,107,107,0.1); }
+
+  /* Loading spinner */
+  .loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 3rem;
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+
+  .spinner {
+    width: 36px; height: 36px;
+    border: 2px solid var(--ray-dim);
+    border-top-color: var(--biolume);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Error */
+  .error-bar {
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: rgba(255, 107, 107, 0.1);
+    border: 1px solid rgba(255, 107, 107, 0.3);
+    color: var(--coral-red);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* Info grid */
+  .info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .info-card {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 12px;
+  }
+
+  .info-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-family: 'Space Mono', monospace;
+    margin-bottom: 4px;
+  }
+
+  .info-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--biolume);
+    font-family: 'Space Mono', monospace;
+  }
+
+  /* placeholder grid for webcam start */
+  .webcam-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 4rem 2rem;
+    text-align: center;
+    color: var(--text-muted);
+  }
+
+  .webcam-placeholder .big-icon { font-size: 3rem; opacity: 0.4; }
+</style>
+</head>
+<body>
+<div class="app-wrapper">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🌊</div>
+      <div>
+        <div class="logo-text">UnderWater-Sim</div>
+        <div class="logo-sub">Underwater Vision Lab</div>
+      </div>
+    </div>
+    <div class="status-pill">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">Connecting...</span>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+
+      <!-- Mode -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-icon">⚙</div>
+          <span class="panel-title">Pipeline Mode</span>
+        </div>
+        <div class="panel-body">
+          <div class="mode-toggle">
+            <button class="mode-btn active" id="btn-simulate" onclick="setMode('simulate')">Simulate</button>
+            <button class="mode-btn" id="btn-restore" onclick="setMode('restore')">Restore</button>
+          </div>
+          <p style="font-size:12px; color:var(--text-muted); line-height:1.6;" id="mode-desc">
+            Applies underwater physics to a clean image — color shift, haze, depth blur, and light rays.
+          </p>
+        </div>
+      </div>
+
+      <!-- Parameters -->
+      <div class="panel" id="sim-params">
+        <div class="panel-header">
+          <div class="panel-icon">🎛</div>
+          <span class="panel-title">Simulate Parameters</span>
+        </div>
+        <div class="panel-body">
+          <div class="slider-group">
+            <div class="slider-row">
+              <label>Haze Strength <span class="slider-val" id="haze-val">0.15</span></label>
+              <input id="sl-haze" type="range" min="0" max="0.5" step="0.01" value="0.15" oninput="updateSlider('haze-val', this.value)" />
+            </div>
+            <div class="slider-row">
+              <label>Depth Blur <span class="slider-val" id="blur-val">0.50</span></label>
+              <input id="sl-blur" type="range" min="0" max="1" step="0.05" value="0.5" oninput="updateSlider('blur-val', this.value)" />
+            </div>
+            <div class="slider-row">
+              <label>Ray Intensity <span class="slider-val" id="ray-val">0.03</span></label>
+              <input id="sl-ray" type="range" min="0" max="0.15" step="0.005" value="0.03" oninput="updateSlider('ray-val', this.value)" />
+            </div>
+            <div class="slider-row">
+              <label>Wave Amplitude <span class="slider-val" id="wave-val">6.0</span></label>
+              <input id="sl-wave" type="range" min="0" max="20" step="0.5" value="6" oninput="updateSlider('wave-val', this.value)" />
+            </div>
+            <div class="slider-row">
+              <label>Particles <span class="slider-val" id="part-val">1.0</span></label>
+              <input id="sl-part" type="range" min="0" max="3" step="0.1" value="1" oninput="updateSlider('part-val', this.value)" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" id="res-params" style="display:none;">
+        <div class="panel-header">
+          <div class="panel-icon">🔬</div>
+          <span class="panel-title">Restore Parameters</span>
+        </div>
+        <div class="panel-body">
+          <div class="slider-group">
+            <div class="slider-row">
+              <label>Omega (ω) <span class="slider-val" id="omega-val">0.95</span></label>
+              <input id="sl-omega" type="range" min="0.5" max="1" step="0.01" value="0.95" oninput="updateSlider('omega-val', this.value)" />
+            </div>
+            <div class="slider-row">
+              <label>Min Transmission <span class="slider-val" id="t0-val">0.25</span></label>
+              <input id="sl-t0" type="range" min="0.1" max="0.5" step="0.01" value="0.25" oninput="updateSlider('t0-val', this.value)" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="panel" id="stats-panel" style="display:none;">
+        <div class="panel-header">
+          <div class="panel-icon">📊</div>
+          <span class="panel-title">Last Result</span>
+        </div>
+        <div class="panel-body">
+          <div class="info-grid">
+            <div class="info-card">
+              <div class="info-label">Resolution</div>
+              <div class="info-value" id="stat-res">—</div>
+            </div>
+            <div class="info-card">
+              <div class="info-label">Mode</div>
+              <div class="info-value" id="stat-mode">—</div>
+            </div>
+            <div class="info-card">
+              <div class="info-label">Time</div>
+              <div class="info-value" id="stat-time">—</div>
+            </div>
+            <div class="info-card">
+              <div class="info-label">Status</div>
+              <div class="info-value" style="color:var(--biolume)">✓ Done</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- WORKSPACE -->
+    <div class="workspace">
+
+      <!-- Tabs -->
+      <div class="panel" style="overflow:visible;">
+        <div class="tabs">
+          <button class="tab-btn active" id="tab-image" onclick="switchTab('image')">🖼 Image</button>
+          <button class="tab-btn" id="tab-video" onclick="switchTab('video')">🎬 Video</button>
+          <button class="tab-btn" id="tab-webcam" onclick="switchTab('webcam')">📷 Webcam</button>
+        </div>
+
+        <!-- IMAGE TAB -->
+        <div id="pane-image" class="panel-body">
+          <div class="drop-zone" id="drop-zone"
+               ondragover="event.preventDefault(); this.classList.add('drag-over')"
+               ondragleave="this.classList.remove('drag-over')"
+               ondrop="handleDrop(event)">
+            <input type="file" accept="image/*" onchange="handleFileSelect(event)" />
+            <div class="drop-icon">🌊</div>
+            <div class="drop-title">Drop an image here</div>
+            <div class="drop-sub">PNG, JPG, WEBP supported · click to browse</div>
+          </div>
+          <div style="margin-top:1rem;">
+            <button class="process-btn" id="process-btn" onclick="processImage()" disabled>
+              ▶ &nbsp; Run Pipeline
+            </button>
+          </div>
+          <div id="img-error" style="display:none; margin-top:1rem;"></div>
+          <div id="img-loading" style="display:none; margin-top:1rem;">
+            <div class="loading"><div class="spinner"></div><span>Processing underwater pipeline...</span></div>
+          </div>
+        </div>
+
+        <!-- VIDEO TAB -->
+        <div id="pane-video" class="panel-body" style="display:none;">
+          <div class="drop-zone" id="drop-zone-video"
+               ondragover="event.preventDefault(); this.classList.add('drag-over')"
+               ondragleave="this.classList.remove('drag-over')"
+               ondrop="handleVideoDrop(event)">
+            <input type="file" accept="video/*" onchange="handleVideoSelect(event)" />
+            <div class="drop-icon">🎬</div>
+            <div class="drop-title">Drop a video here</div>
+            <div class="drop-sub">MP4, MOV, AVI supported · click to browse</div>
+          </div>
+          <div style="margin-top:1rem;">
+            <button class="process-btn" id="video-btn" onclick="processVideo()" disabled>
+              ▶ &nbsp; Process Video
+            </button>
+          </div>
+          <div id="vid-error" style="display:none; margin-top:1rem;"></div>
+          <div id="vid-loading" style="display:none; margin-top:1rem;">
+            <div class="loading"><div class="spinner"></div><span>Processing video frames... this may take a while.</span></div>
+          </div>
+          <div id="vid-result" style="display:none; margin-top:1rem;">
+            <a id="vid-download" class="download-btn" download="UnderWater-Sim-result.mp4">⬇ Download Video</a>
+          </div>
+        </div>
+
+        <!-- WEBCAM TAB -->
+        <div id="pane-webcam" class="panel-body" style="display:none;">
+          <div id="webcam-placeholder" class="webcam-placeholder">
+            <div class="big-icon">📷</div>
+            <p>Live webcam processing</p>
+            <p style="font-size:12px; color:var(--text-muted);">Frames are sent to the backend and returned with effects applied</p>
+          </div>
+          <div id="webcam-active" style="display:none;">
+            <div class="webcam-container">
+              <video id="webcam-video" autoplay playsinline muted></video>
+              <img class="webcam-out" id="webcam-out" />
+              <div class="webcam-overlay-label" id="cam-mode-label">SIMULATE</div>
+            </div>
+          </div>
+          <div style="margin-top:1rem; display:flex; gap:8px; justify-content:center;" id="webcam-controls">
+            <button class="webcam-btn" onclick="startWebcam()" id="cam-start-btn">Start Camera</button>
+            <button class="webcam-btn danger" onclick="stopWebcam()" id="cam-stop-btn" style="display:none;">Stop</button>
+          </div>
+          <div id="cam-error" style="display:none; margin-top:1rem;"></div>
+        </div>
+      </div>
+
+      <!-- BEFORE / AFTER COMPARISON -->
+      <div class="comparison-wrapper" id="comparison" style="display:none;">
+        <div class="comparison-header">
+          <span class="comparison-title">Before / After Comparison</span>
+          <a class="download-btn" id="dl-btn" download="UnderWater-Sim-result.jpg">⬇ Download</a>
+        </div>
+        <div class="compare-container" id="compare-container">
+          <img id="img-before" alt="Original" />
+          <div class="compare-overlay" id="compare-overlay">
+            <img id="img-after" alt="Result" />
+          </div>
+          <div class="compare-slider-line" id="slider-line">
+            <div class="compare-handle">◀▶</div>
+          </div>
+          <div class="compare-label label-before">Original</div>
+          <div class="compare-label label-after" id="after-label">Result</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+let currentMode = 'simulate';
+let currentTab = 'image';
+let selectedFile = null;
+let selectedVideo = null;
+let webcamStream = null;
+let webcamInterval = null;
+let sliderDragging = false;
+
+// ── Server health check ──────────────────────────────────
+async function checkHealth() {
+  try {
+    const r = await fetch(`${API}/health`);
+    if (r.ok) {
+      document.getElementById('status-dot').style.background = 'var(--biolume)';
+      document.getElementById('status-text').textContent = 'API Online';
+    } else { throw new Error(); }
+  } catch {
+    document.getElementById('status-dot').style.background = 'var(--coral-red)';
+    document.getElementById('status-dot').style.boxShadow = '0 0 6px var(--coral-red)';
+    document.getElementById('status-text').textContent = 'API Offline';
+  }
+}
+checkHealth();
+setInterval(checkHealth, 10000);
+
+// ── Mode ─────────────────────────────────────────────────
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('btn-simulate').classList.toggle('active', mode === 'simulate');
+  document.getElementById('btn-restore').classList.toggle('active', mode === 'restore');
+  document.getElementById('sim-params').style.display = mode === 'simulate' ? '' : 'none';
+  document.getElementById('res-params').style.display = mode === 'restore' ? '' : 'none';
+  document.getElementById('mode-desc').textContent = mode === 'simulate'
+    ? 'Applies underwater physics to a clean image — color shift, haze, depth blur, and light rays.'
+    : 'Restores a degraded underwater image using the Dark Channel Prior (UnderWater-Sim algorithm).';
+  document.getElementById('after-label').textContent = mode === 'simulate' ? 'Simulated' : 'Restored';
+  document.getElementById('cam-mode-label').textContent = mode.toUpperCase();
+}
+
+// ── Tab ──────────────────────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  ['image','video','webcam'].forEach(t => {
+    document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
+    document.getElementById(`pane-${t}`).style.display = t === tab ? '' : 'none';
+  });
+  document.getElementById('comparison').style.display = 'none';
+  if (tab !== 'webcam') stopWebcam();
+}
+
+// ── Sliders ──────────────────────────────────────────────
+function updateSlider(id, val) {
+  document.getElementById(id).textContent = parseFloat(val).toFixed(2);
+}
+
+function getSimParams() {
+  return {
+    haze_strength: parseFloat(document.getElementById('sl-haze').value),
+    blur_strength: parseFloat(document.getElementById('sl-blur').value),
+    ray_intensity: parseFloat(document.getElementById('sl-ray').value),
+    wave_amplitude: parseFloat(document.getElementById('sl-wave').value),
+    particle_density: parseFloat(document.getElementById('sl-part').value),
+  };
+}
+
+function getResParams() {
+  return {
+    omega: parseFloat(document.getElementById('sl-omega').value),
+    t0: parseFloat(document.getElementById('sl-t0').value),
+  };
+}
+
+// ── File handling ─────────────────────────────────────────
+function handleFileSelect(e) {
+  selectedFile = e.target.files[0];
+  if (selectedFile) updateDropZone(document.getElementById('drop-zone'), selectedFile.name);
+  document.getElementById('process-btn').disabled = !selectedFile;
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag-over');
+  selectedFile = e.dataTransfer.files[0];
+  if (selectedFile) updateDropZone(document.getElementById('drop-zone'), selectedFile.name);
+  document.getElementById('process-btn').disabled = !selectedFile;
+}
+
+function handleVideoSelect(e) {
+  selectedVideo = e.target.files[0];
+  if (selectedVideo) updateDropZone(document.getElementById('drop-zone-video'), selectedVideo.name);
+  document.getElementById('video-btn').disabled = !selectedVideo;
+}
+
+function handleVideoDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone-video').classList.remove('drag-over');
+  selectedVideo = e.dataTransfer.files[0];
+  if (selectedVideo) updateDropZone(document.getElementById('drop-zone-video'), selectedVideo.name);
+  document.getElementById('video-btn').disabled = !selectedVideo;
+}
+
+function updateDropZone(zone, name) {
+  zone.querySelector('.drop-title').textContent = name;
+  zone.querySelector('.drop-sub').textContent = 'Ready to process · click to change';
+  zone.style.borderColor = 'var(--biolume)';
+}
+
+// ── Image processing ──────────────────────────────────────
+async function processImage() {
+  if (!selectedFile) return;
+  const t0 = Date.now();
+  showError('img-error', null);
+  document.getElementById('img-loading').style.display = '';
+  document.getElementById('process-btn').disabled = true;
+  document.getElementById('comparison').style.display = 'none';
+
+  const form = new FormData();
+  form.append('file', selectedFile);
+  form.append('params', JSON.stringify(currentMode === 'simulate' ? getSimParams() : getResParams()));
+
+  try {
+    const endpoint = currentMode === 'simulate' ? 'simulate/image' : 'restore/image';
+    const res = await fetch(`${API}/${endpoint}`, { method: 'POST', body: form });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Server error'); }
+    const data = await res.json();
+
+    // Load before image to get dimensions
+    const beforeImg = new Image();
+    beforeImg.onload = () => {
+      document.getElementById('stat-res').textContent = `${beforeImg.naturalWidth}×${beforeImg.naturalHeight}`;
+    };
+    beforeImg.src = `data:image/jpeg;base64,${data.original}`;
+
+    document.getElementById('img-before').src = `data:image/jpeg;base64,${data.original}`;
+    document.getElementById('img-after').src = `data:image/jpeg;base64,${data.result}`;
+
+    const dlBtn = document.getElementById('dl-btn');
+    dlBtn.href = `data:image/jpeg;base64,${data.result}`;
+
+    document.getElementById('stat-mode').textContent = currentMode.toUpperCase();
+    document.getElementById('stat-time').textContent = `${((Date.now()-t0)/1000).toFixed(1)}s`;
+    document.getElementById('stats-panel').style.display = '';
+    document.getElementById('comparison').style.display = '';
+
+    initSlider();
+  } catch(e) {
+    showError('img-error', e.message);
+  } finally {
+    document.getElementById('img-loading').style.display = 'none';
+    document.getElementById('process-btn').disabled = false;
+  }
+}
+
+// ── Video processing ───────────────────────────────────────
+async function processVideo() {
+  if (!selectedVideo) return;
+  showError('vid-error', null);
+  document.getElementById('vid-loading').style.display = '';
+  document.getElementById('vid-result').style.display = 'none';
+  document.getElementById('video-btn').disabled = true;
+
+  const form = new FormData();
+  form.append('file', selectedVideo);
+
+  try {
+    const endpoint = currentMode === 'simulate' ? 'simulate/video' : 'restore/video';
+    const res = await fetch(`${API}/${endpoint}`, { method: 'POST', body: form });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Server error'); }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    document.getElementById('vid-download').href = url;
+    document.getElementById('vid-result').style.display = '';
+  } catch(e) {
+    showError('vid-error', e.message);
+  } finally {
+    document.getElementById('vid-loading').style.display = 'none';
+    document.getElementById('video-btn').disabled = false;
+  }
+}
+
+// ── Webcam ────────────────────────────────────────────────
+async function startWebcam() {
+  showError('cam-error', null);
+  try {
+    webcamStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    const video = document.getElementById('webcam-video');
+    video.srcObject = webcamStream;
+
+    document.getElementById('webcam-placeholder').style.display = 'none';
+    document.getElementById('webcam-active').style.display = '';
+    document.getElementById('cam-start-btn').style.display = 'none';
+    document.getElementById('cam-stop-btn').style.display = '';
+
+    // Process a frame every 500ms
+    webcamInterval = setInterval(processWebcamFrame, 500);
+  } catch(e) {
+    showError('cam-error', 'Camera access denied: ' + e.message);
+  }
+}
+
+let webcamProcessing = false;
+async function processWebcamFrame() {
+  const video = document.getElementById('webcam-video');
+  if (!video.videoWidth || webcamProcessing) return;
+  webcamProcessing = true;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+
+  canvas.toBlob(async (blob) => {
+    if (!blob) { webcamProcessing = false; return; }
+    const form = new FormData();
+    form.append('file', blob, 'frame.jpg');
+    form.append('mode', currentMode);
+    form.append('params', JSON.stringify(currentMode === 'simulate' ? getSimParams() : getResParams()));
+
+    try {
+      const res = await fetch(`${API}/webcam/frame`, { method: 'POST', body: form });
+      if (!res.ok) { webcamProcessing = false; return; }
+      const data = await res.json();
+      const out = document.getElementById('webcam-out');
+      out.src = `data:image/jpeg;base64,${data.result}`;
+      out.classList.add('visible');
+    } catch {}
+    webcamProcessing = false;
+  }, 'image/jpeg', 0.7);
+}
+
+function stopWebcam() {
+  if (webcamStream) {
+    webcamStream.getTracks().forEach(t => t.stop());
+    webcamStream = null;
+  }
+  if (webcamInterval) {
+    clearInterval(webcamInterval);
+    webcamInterval = null;
+  }
+  document.getElementById('webcam-placeholder').style.display = '';
+  document.getElementById('webcam-active').style.display = 'none';
+  document.getElementById('cam-start-btn').style.display = '';
+  document.getElementById('cam-stop-btn').style.display = 'none';
+  const out = document.getElementById('webcam-out');
+  out.src = '';
+  out.classList.remove('visible');
+}
+
+// ── Before/After slider ───────────────────────────────────
+function initSlider() {
+  const container = document.getElementById('compare-container');
+  const overlay = document.getElementById('compare-overlay');
+  const sliderLine = document.getElementById('slider-line');
+  let pct = 50;
+
+  function setSlider(x) {
+    const rect = container.getBoundingClientRect();
+    pct = Math.max(5, Math.min(95, ((x - rect.left) / rect.width) * 100));
+    sliderLine.style.left = pct + '%';
+    overlay.style.clipPath = `inset(0 ${100 - pct}% 0 0)`;
+  }
+
+  setSlider(container.getBoundingClientRect().left + container.getBoundingClientRect().width / 2);
+
+  sliderLine.addEventListener('mousedown', () => { sliderDragging = true; });
+  document.addEventListener('mousemove', (e) => { if (sliderDragging) setSlider(e.clientX); });
+  document.addEventListener('mouseup', () => { sliderDragging = false; });
+  sliderLine.addEventListener('touchstart', () => { sliderDragging = true; });
+  document.addEventListener('touchmove', (e) => { if (sliderDragging) setSlider(e.touches[0].clientX); });
+  document.addEventListener('touchend', () => { sliderDragging = false; });
+}
+
+// ── Helpers ───────────────────────────────────────────────
+function showError(id, msg) {
+  const el = document.getElementById(id);
+  if (!msg) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.innerHTML = `<div class="error-bar">⚠ ${msg}</div>`;
+}
+</script>
+</body>
+</html>
